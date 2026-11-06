@@ -6,6 +6,33 @@
   <meta name="robots" content="noindex">
   <title>Vota le startup</title>
   <link rel="stylesheet" href="/style.css">
+  <style>
+    .top { position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 10px 0 8px; margin: 0; border-bottom: 1px solid var(--line); }
+    .top h1 { font-size: 1.15rem; margin: 0; }
+    .tools { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+    .tools input { flex: 1; min-width: 160px; padding: 9px 12px; }
+    .seg { display: flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+    .seg button { border: 0; border-radius: 0; padding: 8px 12px; background: var(--card); }
+    .seg button.on { background: var(--brand); color: var(--brand-ink); font-weight: 600; }
+    .list { margin-top: 12px; }
+    .s { background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--line); border-radius: 12px;
+      margin-bottom: 12px; padding: 14px; scroll-margin-top: 70px; }
+    .s.done { border-left-color: var(--ok); }
+    .s .row { align-items: flex-start; flex-wrap: nowrap; }
+    .s .n { font-weight: 700; font-size: 1.25rem; line-height: 1.2; }
+    .s .d { color: var(--muted); margin-top: 3px; }
+    .badge { font-size: .8rem; padding: 3px 9px; border-radius: 99px; background: var(--chip); white-space: nowrap; }
+    .badge.ok { background: var(--ok); color: #fff; }
+    .crits { display: grid; gap: 2px 28px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); margin-top: 8px; }
+    .crit { border: 0; padding: 8px 0 4px; }
+    .crit b { font-size: .9rem; margin-bottom: 5px; }
+    .scale button { padding: 8px 0; }
+    .status { margin-top: 8px; }
+    .empty { text-align: center; padding: 30px 0; }
+    .scale { grid-template-columns: repeat(10, 1fr) !important; gap: 3px; }
+    .scale button { font-size: .85rem; padding: 9px 0; }
+    @media (max-width: 520px) { .crits { grid-template-columns: 1fr; } }
+  </style>
 </head>
 <body>
 <div class="wrap" id="app"></div>
@@ -14,21 +41,30 @@ const token = location.pathname.split("/").filter(Boolean)[1] || "";
 const PW_KEY = "pw:" + token;
 const app = document.getElementById("app");
 let password = "";
-try { password = localStorage.getItem(PW_KEY) || ""; } catch {}
-let me = null;        // risposta di /api/me
-let current = null;   // indice startup aperta
-let draft = {};       // punteggi in modifica
-let status = { cls: "", text: "" };
+// La password può arrivare nel link: /v/<token>#<password>. Il frammento (#) non viene mai inviato al server.
+const hashPw = decodeURIComponent(location.hash.slice(1)).trim();
+if (hashPw) {
+  password = hashPw;
+  history.replaceState(null, "", location.pathname);
+} else {
+  try { password = localStorage.getItem(PW_KEY) || ""; } catch {}
+}
+
+let me = null;
+let order = [];            // indici delle startup in ordine alfabetico
+let q = "";                // ricerca
+let filter = "all";        // all | todo | done
+let drafts = {};           // idx -> punteggi parziali/in modifica
+let status = {};           // idx -> {cls, text}
 let queue = Promise.resolve();
 
-// "Nome: descrizione" -> { name, tag }
-const parts = (s) => { const k = String(s).indexOf(": "); return k > 0 ? { name: s.slice(0, k), tag: s.slice(k + 2) } : { name: s, tag: "" }; };
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const parts = (s) => { const k = String(s).indexOf(": "); return k > 0 ? { name: s.slice(0, k), tag: s.slice(k + 2) } : { name: s, tag: "" }; };
+const norm = (s) => String(s).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 
 async function api(path, extra = {}) {
   const r = await fetch("/api/" + path, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
+    method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ token, password, ...extra }),
   });
   const data = await r.json().catch(() => ({}));
@@ -40,7 +76,7 @@ function renderLogin(error = "") {
   app.innerHTML = `
     <div class="card" style="margin-top:12vh">
       <h1>Accesso votazioni</h1>
-      <p class="sub">Inserisci la password che ti è stata inviata insieme al link.</p>
+      <p class="sub">Inserisci la password che ti è stata inviata.</p>
       <form id="f" class="row">
         <input class="grow" id="pw" type="text" autocomplete="off" autocapitalize="none" placeholder="Password" autofocus>
         <button class="primary">Entra</button>
@@ -58,107 +94,136 @@ async function load() {
   try {
     me = await api("me");
     try { localStorage.setItem(PW_KEY, password); } catch {}
-    renderList();
+    order = me.startups.map((_, i) => i).sort((a, b) =>
+      parts(me.startups[a]).name.localeCompare(parts(me.startups[b]).name, "it", { sensitivity: "base" }));
+    renderShell();
   } catch (e) {
     try { localStorage.removeItem(PW_KEY); } catch {}
     renderLogin(password ? e.message : "");
   }
 }
 
-const isComplete = (idx) => !!(me.votes[idx] && me.votes[idx].scores);
-const doneCount = () => me.startups.filter((_, i) => isComplete(i)).length;
+const isDone = (i) => !!(me.votes[i] && me.votes[i].scores);
+const scoresOf = (i) => drafts[i] || (me.votes[i] && me.votes[i].scores) || {};
+const doneCount = () => me.startups.filter((_, i) => isDone(i)).length;
 
-function renderList() {
-  current = null;
+function renderShell() {
+  app.innerHTML = `
+    <div class="top">
+      <div class="row">
+        <h1 class="grow">Ciao ${esc(me.voter.name)} 👋</h1>
+        <span id="count" class="badge"></span>
+      </div>
+      <div class="bar" style="margin-top:8px"><i id="barfill"></i></div>
+    </div>
+    <div class="tools" style="margin-top:10px">
+        <input id="q" type="search" placeholder="Cerca startup…" value="${esc(q)}" autocomplete="off">
+        <div class="seg" id="seg">
+          <button data-f="all">Tutte</button><button data-f="todo">Da votare</button><button data-f="done">Votate</button>
+        </div>
+        <button id="next">Prossima da votare ↓</button>
+    </div>
+    ${me.open ? "" : '<div class="err">Votazioni chiuse: puoi solo consultare i tuoi voti.</div>'}
+    <div class="list" id="list"></div>`;
+  document.getElementById("q").oninput = (e) => { q = e.target.value; renderList(); };
+  document.querySelectorAll("#seg button").forEach((b) => (b.onclick = () => { filter = b.dataset.f; renderList(); }));
+  document.getElementById("next").onclick = nextTodo;
+  renderList();
+}
+
+function updateTop() {
   const n = me.startups.length, d = doneCount();
-  app.innerHTML = `
-    <h1>Ciao ${esc(me.voter.name)} 👋</h1>
-    <p class="sub">Valuta ogni startup su ${me.criteria.length} criteri (da ${me.scale.min} a ${me.scale.max}). I voti si salvano automaticamente e puoi modificarli finché le votazioni restano aperte.</p>
-    ${me.open ? "" : '<div class="card err">Le votazioni sono chiuse: puoi solo consultare i tuoi voti.</div>'}
-    <div class="card">
-      <div class="row"><b class="grow">Avanzamento</b><span>${d} / ${n}</span></div>
-      <div class="bar" style="margin-top:8px"><i style="width:${(d / n) * 100}%"></i></div>
-    </div>
-    <div class="grid">
-      ${me.startups.map((name, i) => `
-        <button class="item ${isComplete(i) ? "done" : ""}" data-i="${i}">
-          <span><b>${i + 1}. ${esc(parts(name).name)}</b><br><small class="muted">${esc(parts(name).tag)}</small></span>
-          <span class="tick">${isComplete(i) ? "✓" : ""}</span>
-        </button>`).join("")}
-    </div>`;
-  app.querySelectorAll("[data-i]").forEach((b) => (b.onclick = () => openStartup(+b.dataset.i)));
+  document.getElementById("count").textContent = `${d} / ${n} votate`;
+  document.getElementById("barfill").style.width = `${(d / n) * 100}%`;
+  document.querySelectorAll("#seg button").forEach((b) => b.classList.toggle("on", b.dataset.f === filter));
 }
 
-function openStartup(i) {
-  current = i;
-  const saved = me.votes[i] && me.votes[i].scores;
-  draft = saved ? { ...saved } : {};
-  status = saved ? { cls: "ok", text: "Voto salvato ✓" } : { cls: "", text: "" };
-  renderStartup();
+function badgeHtml(i) {
+  const sc = scoresOf(i), filled = me.criteria.filter((c) => sc[c.id]).length;
+  if (isDone(i)) return `<span class="badge ok">✓ ${me.criteria.reduce((a, c) => a + me.votes[i].scores[c.id], 0)}</span>`;
+  return filled ? `<span class="badge">${filled}/${me.criteria.length}</span>` : "";
 }
 
-function renderStartup() {
-  const i = current, total = me.startups.length;
-  app.innerHTML = `
-    <div class="row" style="margin-top:8px">
-      <button id="back">← Elenco</button>
-      <span class="muted grow" style="text-align:right">${i + 1} / ${total}</span>
+function cardHtml(i) {
+  const { name, tag } = parts(me.startups[i]);
+  const sc = scoresOf(i);
+  const st = status[i] || (isDone(i) ? { cls: "ok", text: "Voto salvato ✓" } : { cls: "", text: "" });
+  return `<div class="s ${isDone(i) ? "done" : ""}" data-i="${i}">
+    <div class="row">
+      <div class="grow"><div class="n">${esc(name)}</div><div class="d">${esc(tag)}</div></div>
+      <span data-badge>${badgeHtml(i)}</span>
     </div>
-    <div class="card" style="margin-top:14px;border-left:5px solid var(--brand)">
-      <h1 style="margin:0 0 6px;font-size:1.7rem">${esc(parts(me.startups[i]).name)}</h1>
-      <div class="muted" style="font-size:1.05rem">${esc(parts(me.startups[i]).tag)}</div>
-    </div>
-    <div class="card">
+    <div class="crits">
       ${me.criteria.map((c) => `
-        <div class="crit">
-          <b>${esc(c.label)}</b>
-          <div class="scale">
-            ${Array.from({ length: me.scale.max - me.scale.min + 1 }, (_, k) => {
-              const v = me.scale.min + k;
-              return `<button data-c="${c.id}" data-v="${v}" class="${draft[c.id] === v ? "on" : ""}" ${me.open ? "" : "disabled"}>${v}</button>`;
-            }).join("")}
-          </div>
+        <div class="crit"><b>${esc(c.label)}</b>
+          <div class="scale">${Array.from({ length: me.scale.max - me.scale.min + 1 }, (_, k) => {
+            const v = me.scale.min + k;
+            return `<button data-i="${i}" data-c="${c.id}" data-v="${v}" class="${sc[c.id] === v ? "on" : ""}" ${me.open ? "" : "disabled"}>${v}</button>`;
+          }).join("")}</div>
         </div>`).join("")}
     </div>
-    <div class="sticky">
-      <div class="status ${status.cls}" id="st">${esc(status.text)}</div>
-      <div class="row" style="margin-top:6px">
-        <button id="prev" ${i === 0 ? "disabled" : ""}>← Precedente</button>
-        <button id="next" class="primary grow" ${i === total - 1 ? "disabled" : ""}>Successiva →</button>
-      </div>
-    </div>`;
-  document.getElementById("back").onclick = renderList;
-  document.getElementById("prev").onclick = () => openStartup(i - 1);
-  document.getElementById("next").onclick = () => openStartup(i + 1);
-  app.querySelectorAll(".scale button").forEach((b) => (b.onclick = () => pick(b.dataset.c, +b.dataset.v)));
+    <div class="status ${st.cls}" id="st-${i}">${esc(st.text)}</div>
+  </div>`;
 }
 
-function setStatus(cls, text) {
-  status = { cls, text };
-  const el = document.getElementById("st");
+function renderList() {
+  updateTop();
+  const nq = norm(q.trim());
+  const shown = order.filter((i) => {
+    if (filter === "todo" && isDone(i)) return false;
+    if (filter === "done" && !isDone(i)) return false;
+    return !nq || norm(me.startups[i]).includes(nq);
+  });
+  const list = document.getElementById("list");
+  list.innerHTML = shown.length ? shown.map(cardHtml).join("") : '<div class="empty muted">Nessuna startup trovata.</div>';
+  list.querySelectorAll(".scale button").forEach((b) => (b.onclick = () => pick(+b.dataset.i, b.dataset.c, +b.dataset.v)));
+}
+
+// Aggiorna una sola scheda senza ridisegnare la lista (così non si perde la posizione di scroll).
+function refreshCard(i) {
+  const el = document.querySelector(`.s[data-i="${i}"]`);
+  if (el) { el.classList.toggle("done", isDone(i)); el.querySelector("[data-badge]").innerHTML = badgeHtml(i); }
+  updateTop();
+}
+
+function setStatus(i, cls, text) {
+  status[i] = { cls, text };
+  const el = document.getElementById("st-" + i);
   if (el) { el.className = "status " + cls; el.textContent = text; }
 }
 
-function pick(cid, v) {
-  draft[cid] = v;
-  app.querySelectorAll(`[data-c="${cid}"]`).forEach((b) => b.classList.toggle("on", +b.dataset.v === v));
-  const missing = me.criteria.filter((c) => !draft[c.id]).length;
-  if (missing) return setStatus("wait", `Mancano ${missing} criteri: il voto verrà salvato al completamento`);
-  save(current, { ...draft });
+function pick(i, cid, v) {
+  const d = (drafts[i] = { ...scoresOf(i), [cid]: v });
+  document.querySelectorAll(`.s[data-i="${i}"] [data-c="${cid}"]`).forEach((b) => b.classList.toggle("on", +b.dataset.v === v));
+  const missing = me.criteria.filter((c) => !d[c.id]).length;
+  refreshCard(i);
+  if (missing) return setStatus(i, "wait", `Mancano ${missing} criteri: il voto si salva al completamento`);
+  save(i, { ...d });
 }
 
-function save(idx, scores) {
-  setStatus("wait", "Salvataggio…");
-  // Le richieste partono una alla volta, nell'ordine dei click.
+function save(i, scores) {
+  setStatus(i, "wait", "Salvataggio…");
   queue = queue.then(async () => {
     try {
-      const r = await api("vote", { startupId: idx, scores });
-      me.votes[idx] = r.saved;
-      if (current === idx) setStatus("ok", "Voto salvato ✓");
+      const r = await api("vote", { startupId: i, scores });
+      me.votes[i] = r.saved;
+      delete drafts[i];
+      setStatus(i, "ok", "Voto salvato ✓");
+      refreshCard(i);
     } catch (e) {
-      if (current === idx) setStatus("bad", "Non salvato: " + e.message + " — riprova a toccare un punteggio");
+      setStatus(i, "bad", "Non salvato: " + e.message + " — tocca di nuovo un punteggio per riprovare");
     }
   });
+}
+
+function nextTodo() {
+  // la prima non ancora votata, a partire da quella attualmente in vista
+  const cards = [...document.querySelectorAll(".s")];
+  const y = document.querySelector(".top").offsetHeight + 20;
+  const pending = cards.filter((c) => !isDone(+c.dataset.i));
+  const after = pending.find((c) => c.getBoundingClientRect().top > y + 5) || pending[0];
+  if (!after) return alert("Hai votato tutte le startup 🎉");
+  after.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 if (!token) renderLogin("Link non valido"); else if (password) load(); else renderLogin();

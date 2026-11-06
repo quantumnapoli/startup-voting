@@ -141,11 +141,11 @@ function exportCsv(sorted) {
 
 function tabVoters(_, prog) {
   const cfg = state.config, n = cfg.startups.length;
-  const link = (v) => `${location.origin}/v/${v.token}`;
+  const link = (v) => `${location.origin}/v/${v.token}#${v.password}`;
   document.getElementById("body").innerHTML = `
     <div class="card">
-      <div class="row"><h2 class="grow">Votanti (${cfg.voters.length})</h2><button id="copyall">Copia tutti (link + password)</button></div>
-      <p class="muted" style="margin:0 0 10px">Ogni votante riceve il proprio link e la propria password. Il link da solo non basta per votare.</p>
+      <div class="row"><h2 class="grow">Votanti (${cfg.voters.length})</h2><button id="copyall">Copia tutti i link</button></div>
+      <p class="muted" style="margin:0 0 10px">Il link contiene già l'accesso (la password dopo il #): basta inviarlo e il votante entra direttamente. Il link senza la parte dopo il # chiede invece la password.</p>
       <div class="scroll"><table>
         <thead><tr><th>Nome</th><th>Link personale</th><th>Password</th><th class="num">Avanzamento</th><th></th></tr></thead>
         <tbody>${prog.map(({ v, done }) => `<tr>
@@ -161,7 +161,7 @@ function tabVoters(_, prog) {
     </div>`;
   document.querySelectorAll("[data-copy]").forEach((b) => (b.onclick = () => copy(b.dataset.copy, b)));
   document.getElementById("copyall").onclick = (e) => copy(
-    cfg.voters.map((v) => `${v.name}\n${link(v)}\nPassword: ${v.password}`).join("\n\n"), e.target);
+    cfg.voters.map((v) => `${v.name}\n${link(v)}`).join("\n\n"), e.target);
   document.querySelectorAll("[data-reset]").forEach((b) => (b.onclick = async () => {
     if (confirm("Rigenerare link e password? Quelli vecchi smetteranno di funzionare (i voti restano).")) { state = await call("reset-voter", { id: b.dataset.reset }); render(); }
   }));
