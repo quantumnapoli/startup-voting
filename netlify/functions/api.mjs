@@ -27,7 +27,50 @@ const VOTER_NAMES = [
   "Sapienza Hub", "Urbe HUB", "Elis", "ASSODIGIT", "Almaviva", "KPMG",
   "BIP", "unfoldtomorrow",
 ];
-const STARTUP_COUNT = 40;
+const STARTUPS = [
+  "AcacIA Innovate: Korvia, ESG Intelligence Platform",
+  "AI Tempo Brand: Il primo media di presenza, dedicato ai Brand",
+  "APPYPILGRIM: Ecosystem Phygital per turismo spirituale e slow tourism",
+  "BBB: Bio-Mattone per un’edilizia sostenibile in legno armato",
+  "BIPV: Rivestimenti ad alta efficienza energetica per l’edilizia e l’architettura",
+  "Brief: La tua redazione con i tuoi contenuti in audio naturale ed emozionale",
+  "Capio Robotics: manipolazione flessibile per le piattaforme robotiche",
+  "Cicerone: attraction & retention dei professionisti stranieri",
+  "Cybertec Services: computArte, IA privata per tutti",
+  "E-voluzione: stage orchestra audio and video experience",
+  "Elephant Brain Lab: la piattaforma per le prestazioni mentali e fisiche",
+  "DraftIngo: crea e consolida il tuo patrimonio giuridico, amministrativo, professionale e aziendale",
+  "Grow Up: la Piattaforma HR che Incrementa il",
+  "Handy Signs: il tuo assistente Lis a portata di mano",
+  "Human Oversight Labs: dimostra che dietro il tuo lavoro c'è una persona",
+  "IInformatica: sentinel grid, il sistema nervoso della rete elettrica",
+  "InsiemePiù: il primo Sistema Operativo del Caregiving",
+  "Invent Solutions: prevenzione e monitoraggio di primo livello",
+  "Isagog: un'IA che sa dire cosa sa e non lo so",
+  "Italy VR Experience: analisi turistico intelligente",
+  "Laborium: valutiamo i talenti tech per il codice vero, oltre il CV",
+  "Loki: migliorare la sicurezza stradale con l'intelligenza artificiale",
+  "MindLeague: proteggere la mente e il cuore",
+  "Mirabilis: Inclusione, formazione e innovazione per persone, scuole e territori",
+  "Motiontech: prevenire e gestire le aziende ed eventuali situazioni di crisi",
+  "Movitas: connettiamo pazienti, caregiver e partner per la mobilità",
+  "My Industries: myRobot intelligenza nel gesto fisico",
+  "Neurons: connettere cittadini, Scuole, Enti del Terzo Settore, imprese e comunità",
+  "NV group: la rete di prossimità per i servizi pubblici",
+  "Overbook: libri, persone, relazioni La biblioteca diffusa come fonte di valore",
+  "Pamina: la stanza digitale 3D per provare i vestiti online",
+  "Prana: per qualità dell’aria indoor",
+  "ParlaconKarla: il supporto genitoriale verticale del mercato italiano",
+  "RI-hub: il tuo fisioterapista, ovunque tu sia",
+  "Sciamlab: il Report sul territorio a portata di tap",
+  "Sensers: infrastruttura Fiduciaria per Comunità Intelligenti",
+  "SiWeGO: smart eco transport",
+  "SlowHive: weRoad degli smart worker",
+  "Speaqi: la tua esperienza digitale, in ogni lingua",
+  "Spm medica: infrastruttura sanitaria patient-centric che mette in comunicazione ogni realtà clinica",
+  "Sportfulness: l'infrastruttura digitale per il benessere mentale nello sport",
+  "Travelware: trasformare le destinazioni in ecosistemi rigenerativi"
+];
 
 const json = (data, status = 200) =>
   new Response(JSON.stringify(data), {
@@ -66,7 +109,7 @@ function seedConfig() {
   return {
     open: true,
     criteria: CRITERIA,
-    startups: Array.from({ length: STARTUP_COUNT }, (_, i) => `Startup ${i + 1}`),
+    startups: STARTUPS,
     voters,
   };
 }

@@ -21,6 +21,8 @@ let draft = {};       // punteggi in modifica
 let status = { cls: "", text: "" };
 let queue = Promise.resolve();
 
+// "Nome: descrizione" -> { name, tag }
+const parts = (s) => { const k = String(s).indexOf(": "); return k > 0 ? { name: s.slice(0, k), tag: s.slice(k + 2) } : { name: s, tag: "" }; };
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 async function api(path, extra = {}) {
@@ -80,7 +82,7 @@ function renderList() {
     <div class="grid">
       ${me.startups.map((name, i) => `
         <button class="item ${isComplete(i) ? "done" : ""}" data-i="${i}">
-          <span>${i + 1}. ${esc(name)}</span>
+          <span><b>${i + 1}. ${esc(parts(name).name)}</b><br><small class="muted">${esc(parts(name).tag)}</small></span>
           <span class="tick">${isComplete(i) ? "✓" : ""}</span>
         </button>`).join("")}
     </div>`;
@@ -102,7 +104,8 @@ function renderStartup() {
       <button id="back">← Elenco</button>
       <span class="muted grow" style="text-align:right">${i + 1} / ${total}</span>
     </div>
-    <h1 style="margin-top:14px">${esc(me.startups[i])}</h1>
+    <h1 style="margin-top:14px">${esc(parts(me.startups[i]).name)}</h1>
+    <p class="sub">${esc(parts(me.startups[i]).tag)}</p>
     <div class="card">
       ${me.criteria.map((c) => `
         <div class="crit">
