@@ -7,6 +7,9 @@
   <title>Vota le startup</title>
   <link rel="stylesheet" href="/style.css">
   <style>
+    .banner { margin: 10px 0 0; }
+    .banner img { display: block; width: 100%; height: auto; border-radius: 12px; }
+    .banner .cap { margin-top: 6px; text-align: center; font-size: .78rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
     .top { position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 10px 0 8px; margin: 0; border-bottom: 1px solid var(--line); }
     .top h1 { font-size: 1.1rem; margin: 0; }
     .tools { display: grid; gap: 8px; margin-top: 10px; }
@@ -76,7 +79,8 @@ async function api(path, extra = {}) {
 
 function renderLogin(error = "") {
   app.innerHTML = `
-    <div class="card" style="margin-top:12vh">
+    <header class="banner"><img src="/header.webp" width="2000" height="201" alt="Con il sostegno di Roma e Fondazione Ampio Raggio – Jazz'Inn 2026 – Innovation Challenge 2026"><div class="cap">Fondazione Ampio Raggio · Innovation Challenge 2026</div></header>
+    <div class="card" style="margin-top:20px">
       <h1>Accesso votazioni</h1>
       <p class="sub">Inserisci la password che ti è stata inviata.</p>
       <form id="f" class="row">
@@ -111,6 +115,7 @@ const doneCount = () => me.startups.filter((_, i) => isDone(i)).length;
 
 function renderShell() {
   app.innerHTML = `
+    <header class="banner"><img src="/header.webp" width="2000" height="201" alt="Con il sostegno di Roma e Fondazione Ampio Raggio – Jazz'Inn 2026 – Innovation Challenge 2026"><div class="cap">Fondazione Ampio Raggio · Innovation Challenge 2026</div></header>
     <div class="top">
       <div class="row">
         <h1 class="grow">Ciao ${esc(me.voter.name)} 👋</h1>
