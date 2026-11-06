@@ -104,8 +104,10 @@ function renderStartup() {
       <button id="back">← Elenco</button>
       <span class="muted grow" style="text-align:right">${i + 1} / ${total}</span>
     </div>
-    <h1 style="margin-top:14px">${esc(parts(me.startups[i]).name)}</h1>
-    <p class="sub">${esc(parts(me.startups[i]).tag)}</p>
+    <div class="card" style="margin-top:14px;border-left:5px solid var(--brand)">
+      <h1 style="margin:0 0 6px;font-size:1.7rem">${esc(parts(me.startups[i]).name)}</h1>
+      <div class="muted" style="font-size:1.05rem">${esc(parts(me.startups[i]).tag)}</div>
+    </div>
     <div class="card">
       ${me.criteria.map((c) => `
         <div class="crit">
