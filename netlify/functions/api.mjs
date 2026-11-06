@@ -4,6 +4,7 @@
 //   config           -> { open, criteria[], startups[], voters[] }
 //   votes/<voterId>  -> { "<startupIdx>": { scores: {c1..c7}, ts } }
 // Ogni votante scrive solo il proprio blob (nessuna contesa tra giurati).
+// NB: @netlify/blobs 8.x: setJSON() restituisce void, non usare il valore di ritorno.
 import { getStore } from "@netlify/blobs";
 import crypto from "node:crypto";
 
@@ -117,7 +118,7 @@ function seedConfig() {
 async function loadConfig(s) {
   let c = await s.get("config", { type: "json" });
   if (!c) {
-    await s.setJSON("config", seedConfig(), { onlyIfNew: true });
+    await s.setJSON("config", seedConfig());
     c = await s.get("config", { type: "json" });
   }
   // Se l'elenco salvato è ancora quello segnaposto ("Startup 1".."Startup N"), usa l'elenco ufficiale.
@@ -148,18 +149,21 @@ function validScores(scores) {
   return out;
 }
 
+// Ogni votante scrive solo il proprio blob e il client invia i salvataggi uno alla volta.
+// Per sicurezza (due schede aperte insieme) dopo la scrittura si rilegge e, se il proprio
+// voto non risulta, si riprova: le scritture concorrenti convergono.
 async function saveVote(s, voterId, startupIdx, scores) {
   const key = `votes/${voterId}`;
-  for (let i = 0; i < 6; i++) {
-    const e = await s.getWithMetadata(key, { type: "json" });
-    const data = e ? e.data : {};
-    data[startupIdx] = { scores, ts: Date.now() };
-    const r = e
-      ? await s.setJSON(key, data, { onlyIfMatch: e.etag })
-      : await s.setJSON(key, data, { onlyIfNew: true });
-    if (r.modified) return data[startupIdx];
+  const entry = { scores, ts: Date.now() };
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const data = (await s.get(key, { type: "json" })) || {};
+    data[startupIdx] = entry;
+    await s.setJSON(key, data);
+    const check = await s.get(key, { type: "json" });
+    if (check && check[startupIdx] && check[startupIdx].ts === entry.ts) return entry;
+    await new Promise((r) => setTimeout(r, 40 + Math.random() * 120));
   }
-  throw new Error("Salvataggio concorrente non riuscito, riprova.");
+  throw new Error("Salvataggio non riuscito, riprova.");
 }
 
 function authVoter(cfg, token, password) {
