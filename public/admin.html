@@ -206,7 +206,7 @@ function tabSettings() {
     </div>
     <div class="card">
       <h2>Criteri di valutazione</h2>
-      <p class="muted">Punteggio da 1 a 10 per ciascun criterio.</p>
+      <p class="muted">Punteggio da 1 a 5 per ciascun criterio.</p>
       <div class="row">${cfg.criteria.map((c) => `<span class="pill">${esc(c.label)}</span>`).join("")}</div>
     </div>`;
   document.getElementById("toggle").onclick = async () => { state = await call("open", { open: !cfg.open }); render(); };

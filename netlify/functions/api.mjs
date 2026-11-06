@@ -19,7 +19,7 @@ const CRITERIA = [
   { id: "mercato", label: "Opportunità di mercato" },
 ];
 const MIN = 1;
-const MAX = 10;
+const MAX = 5;
 
 const VOTER_NAMES = [
   "Fabbri", "Morgante", "Niglio", "Invitalia", "Rome Future Week",
