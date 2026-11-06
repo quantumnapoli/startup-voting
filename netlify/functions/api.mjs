@@ -120,6 +120,12 @@ async function loadConfig(s) {
     await s.setJSON("config", seedConfig(), { onlyIfNew: true });
     c = await s.get("config", { type: "json" });
   }
+  // Se l'elenco salvato è ancora quello segnaposto ("Startup 1".."Startup N"), usa l'elenco ufficiale.
+  // Una volta che i nomi veri sono salvati (anche modificati da /admin) questo non scatta più.
+  if (c.startups.every((n) => /^Startup \d+$/.test(n))) {
+    c.startups = STARTUPS;
+    await saveConfig(s, c);
+  }
   return c;
 }
 
