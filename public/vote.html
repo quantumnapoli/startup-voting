@@ -79,7 +79,7 @@ async function api(path, extra = {}) {
 
 function renderLogin(error = "") {
   app.innerHTML = `
-    <header class="banner"><img src="/header.webp" width="2000" height="201" alt="Con il sostegno di Roma e Fondazione Ampio Raggio – Jazz'Inn 2026 – Innovation Challenge 2026"><div class="cap">Fondazione Ampio Raggio · Innovation Challenge 2026</div></header>
+    <header class="banner"><img src="/header.webp" width="2000" height="201" alt="Con il sostegno di Roma e Fondazione Ampio Raggio – Jazz'Inn 2026 – Innovation Challenge 2026"><div class="cap">Fondazione Ampio Raggio · Challenge Jazz'Inn</div></header>
     <div class="card" style="margin-top:20px">
       <h1>Accesso votazioni</h1>
       <p class="sub">Inserisci la password che ti è stata inviata.</p>
@@ -115,7 +115,7 @@ const doneCount = () => me.startups.filter((_, i) => isDone(i)).length;
 
 function renderShell() {
   app.innerHTML = `
-    <header class="banner"><img src="/header.webp" width="2000" height="201" alt="Con il sostegno di Roma e Fondazione Ampio Raggio – Jazz'Inn 2026 – Innovation Challenge 2026"><div class="cap">Fondazione Ampio Raggio · Innovation Challenge 2026</div></header>
+    <header class="banner"><img src="/header.webp" width="2000" height="201" alt="Con il sostegno di Roma e Fondazione Ampio Raggio – Jazz'Inn 2026 – Innovation Challenge 2026"><div class="cap">Fondazione Ampio Raggio · Challenge Jazz'Inn</div></header>
     <div class="top">
       <div class="row">
         <h1 class="grow">Ciao ${esc(me.voter.name)} 👋</h1>
