@@ -8,30 +8,32 @@
   <link rel="stylesheet" href="/style.css">
   <style>
     .top { position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 10px 0 8px; margin: 0; border-bottom: 1px solid var(--line); }
-    .top h1 { font-size: 1.15rem; margin: 0; }
-    .tools { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
-    .tools input { flex: 1; min-width: 160px; padding: 9px 12px; }
+    .top h1 { font-size: 1.1rem; margin: 0; }
+    .tools { display: grid; gap: 8px; margin-top: 10px; }
+    .tools input { padding: 9px 12px; }
+    .tools2 { display: flex; gap: 8px; justify-content: space-between; align-items: stretch; }
+    .tools2 button { padding: 8px 12px; font-size: .9rem; }
     .seg { display: flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
-    .seg button { border: 0; border-radius: 0; padding: 8px 12px; background: var(--card); }
+    .seg button { border: 0; border-radius: 0; background: var(--card); }
     .seg button.on { background: var(--brand); color: var(--brand-ink); font-weight: 600; }
     .list { margin-top: 12px; }
     .s { background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--line); border-radius: 12px;
-      margin-bottom: 12px; padding: 14px; scroll-margin-top: 70px; }
+      margin-bottom: 12px; padding: 12px 14px 10px; scroll-margin-top: 70px; }
     .s.done { border-left-color: var(--ok); }
     .s .row { align-items: flex-start; flex-wrap: nowrap; }
-    .s .n { font-weight: 700; font-size: 1.25rem; line-height: 1.2; }
-    .s .d { color: var(--muted); margin-top: 3px; }
+    .s .n { font-weight: 800; font-size: 1.25rem; line-height: 1.2; color: var(--brand); }
+    .s .d { color: var(--muted); margin-top: 2px; font-size: .92rem; }
     .badge { font-size: .8rem; padding: 3px 9px; border-radius: 99px; background: var(--chip); white-space: nowrap; }
     .badge.ok { background: var(--ok); color: #fff; }
-    .crits { display: grid; gap: 2px 28px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); margin-top: 8px; }
-    .crit { border: 0; padding: 8px 0 4px; }
-    .crit b { font-size: .9rem; margin-bottom: 5px; }
-    .scale button { padding: 8px 0; }
-    .status { margin-top: 8px; }
+    /* criteri uno sotto l'altro: etichetta a sinistra, 5 tasti a destra sulla stessa riga */
+    .crits { display: block; margin-top: 6px; }
+    .crit { display: grid; grid-template-columns: minmax(92px, 34%) 1fr; gap: 8px; align-items: center; padding: 4px 0; border-top: 1px solid var(--line); }
+    .crit:first-child { border-top: 0; }
+    .crit b { font-size: .82rem; margin: 0; line-height: 1.2; }
+    .scale { grid-template-columns: repeat(5, 1fr) !important; gap: 5px; }
+    .scale button { font-size: .95rem; padding: 7px 0; border-radius: 8px; }
+    .status { margin-top: 4px; font-size: .82rem; min-height: 1.1em; }
     .empty { text-align: center; padding: 30px 0; }
-    .scale { grid-template-columns: repeat(5, 1fr) !important; gap: 6px; }
-    .scale button { font-size: 1rem; padding: 12px 0; }
-    @media (max-width: 520px) { .crits { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
@@ -116,12 +118,14 @@ function renderShell() {
       </div>
       <div class="bar" style="margin-top:8px"><i id="barfill"></i></div>
     </div>
-    <div class="tools" style="margin-top:10px">
-        <input id="q" type="search" placeholder="Cerca startup…" value="${esc(q)}" autocomplete="off">
+    <div class="tools">
+      <input id="q" type="search" placeholder="Cerca startup…" value="${esc(q)}" autocomplete="off">
+      <div class="tools2">
         <div class="seg" id="seg">
           <button data-f="all">Tutte</button><button data-f="todo">Da votare</button><button data-f="done">Votate</button>
         </div>
-        <button id="next">Prossima da votare ↓</button>
+        <button id="next">Prossima ↓</button>
+      </div>
     </div>
     ${me.open ? "" : '<div class="err">Votazioni chiuse: puoi solo consultare i tuoi voti.</div>'}
     <div class="list" id="list"></div>`;
