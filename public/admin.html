@@ -26,7 +26,30 @@
     .rc .c .b { height: 5px; border-radius: 9px; background: var(--line); margin-top: 3px; overflow: hidden; }
     .rc .c .b i { display: block; height: 100%; background: var(--brand); }
     #vseg button { white-space: nowrap; padding: 8px 12px; font-size: .9rem; }
-    /* votanti a schede */
+    /* lista votanti */
+    .psum { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 12px; }
+    .psum .pill b { margin-right: 4px; }
+    .ptools { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+    .ptools input { flex: 1; min-width: 160px; padding: 9px 12px; }
+    .ptools .seg button { padding: 8px 12px; font-size: .9rem; white-space: nowrap; }
+    .pgrid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+    .pc { border: 1px solid var(--line); border-radius: 14px; padding: 14px; background: var(--card); display: flex; flex-direction: column; gap: 10px; }
+    .pc-h { display: flex; gap: 12px; align-items: center; }
+    .av { width: 44px; height: 44px; border-radius: 50%; color: #fff; display: grid; place-items: center; font-weight: 700; flex: none; letter-spacing: .02em; }
+    .pc-t { flex: 1; min-width: 0; line-height: 1.25; }
+    .pc-t b { font-size: 1.05rem; display: block; overflow-wrap: anywhere; }
+    .pc-t small { color: var(--muted); }
+    .stt { font-size: .75rem; font-weight: 600; padding: 3px 10px; border-radius: 99px; white-space: nowrap; }
+    .stt.done { background: var(--ok); color: #fff; } .stt.part { background: #fde7c3; color: #8a5300; } .stt.none { background: var(--chip); color: var(--muted); }
+    @media (prefers-color-scheme: dark) { .stt.part { background: #4a3510; color: #f5c470; } }
+    .pc-p { display: flex; align-items: center; gap: 10px; } .pc-p .bar { flex: 1; } .pc-p span { font-variant-numeric: tabular-nums; font-size: .85rem; color: var(--muted); }
+    .pc-a { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+    .pc-a button, .pc-a a.btn { padding: 8px 12px; font-size: .88rem; }
+    a.btn { font: inherit; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 10px; text-decoration: none; display: inline-block; }
+    .pc-a .pwb { font-family: ui-monospace, monospace; background: var(--chip); letter-spacing: .04em; }
+    .pc-a .ghost { border-color: transparent; background: transparent; color: var(--muted); }
+    .pc-a .ghost.danger { color: var(--bad); }
+    /* votanti a schede (vecchio) */
     .vc { border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-bottom: 10px; background: var(--card); }
     .vc .h { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
     .vc .h b { font-size: 1.05rem; } .vc .h span { color: var(--muted); font-size: .85rem; }
@@ -77,6 +100,7 @@ const fmtT = (ts) => (ts ? new Date(ts).toLocaleString("it-IT", { day: "2-digit"
 const sumOf = (e) => Object.values(e.scores).reduce((a, b) => a + b, 0);
 const normS = (x) => String(x).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 const chipsHtml = (e) => state.config.criteria.map((c) => `<span class="ch" title="${esc(c.label)}">${SHORT[c.id] || esc(c.label.slice(0, 3))}<b>${e.scores[c.id]}</b></span>`).join("");
+let vsq = "", vsf = "all";
 let vmode = "startup", vq = "", vVoter = "", vStart = "", openSet = new Set();
 let state = null, tab = "rank", timer = null, sortKey = "total", editing = false;
 
@@ -113,7 +137,7 @@ async function refresh(first = false) {
     state = await call("state");
     try { sessionStorage.setItem("adminpw", pw); } catch {}
     if (first) { render(); clearInterval(timer); timer = setInterval(() => refresh(), 5000); }
-    else if (!editing) { if (tab === "votes" && document.getElementById("vlist")) renderVotesList(); else render(); }
+    else if (!editing) { if (tab === "votes" && document.getElementById("vlist")) renderVotesList(); else if (tab === "voters" && document.getElementById("vtlist")) renderVotersList(); else render(); }
   } catch (e) {
     if (first || /errata/.test(e.message)) login(e.message);
   }
@@ -226,50 +250,79 @@ function exportCsv(sorted) {
   a.download = "risultati-votazioni.csv"; a.click();
 }
 
-function tabVoters(_, prog) {
-  const cfg = state.config, n = cfg.startups.length;
-  const link = (v) => `${location.origin}/v/${v.token}#${v.password}`;
+const hueOf = (x) => { let h = 7; for (const ch of x) h = (h * 31 + ch.charCodeAt(0)) % 360; return h; };
+const initialsOf = (x) => x.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+const voterLink = (v) => `${location.origin}/v/${v.token}#${v.password}`;
+
+function tabVoters() {
+  const cfg = state.config;
   document.getElementById("body").innerHTML = `
     <div class="card">
       <div class="row"><h2 class="grow">Votanti (${cfg.voters.length})</h2><button id="copyall">Copia tutti i link</button></div>
-      <p class="muted" style="margin:0 0 10px">Il link contiene già l'accesso (la password dopo il #): basta inviarlo e il votante entra direttamente. Il link senza la parte dopo il # chiede invece la password.</p>
-      <div class="scroll only-d"><table>
-        <thead><tr><th>Nome</th><th>Link personale</th><th>Password</th><th class="num">Avanzamento</th><th></th></tr></thead>
-        <tbody>${prog.map(({ v, done }) => `<tr>
-          <td><b>${esc(v.name)}</b></td>
-          <td><button data-copy="${esc(link(v))}">Copia link</button></td>
-          <td><code class="k">${esc(v.password)}</code></td>
-          <td class="num">${done}/${n}</td>
-          <td class="row" style="gap:6px">
-            <button data-reset="${v.id}" title="Genera nuovo link e password">Rigenera</button>
-            <button class="danger" data-del="${v.id}">Elimina</button></td></tr>`).join("")}</tbody>
-      </table></div>
-      <div class="only-m">${prog.map(({ v, done }) => `<div class="vc">
-        <div class="h"><b>${esc(v.name)}</b><span>${done}/${n} votate</span></div>
-        <div class="bar"><i style="width:${(done / n) * 100}%"></i></div>
-        <div class="acts">
-          <button class="primary" data-copy="${esc(link(v))}">Copia link</button>
-          <code class="k">${esc(v.password)}</code>
-          <span class="grow"></span>
-          <button data-reset="${v.id}">Rigenera</button>
-          <button class="danger" data-del="${v.id}">Elimina</button>
-        </div></div>`).join("")}</div>
-      <form id="addf" class="row" style="margin-top:14px"><input class="grow" id="newname" placeholder="Aggiungi votante…"><button class="primary">Aggiungi</button></form>
+      <p class="muted" style="margin:0 0 12px">Il link contiene già l'accesso (la password dopo il #): basta inviarlo e il votante entra direttamente. Senza la parte dopo il # il link chiede la password.</p>
+      <div class="psum" id="vtsum"></div>
+      <div class="ptools">
+        <input id="vtq" type="search" placeholder="Cerca votante…" autocomplete="off" value="${esc(vsq)}">
+        <div class="seg" id="vtf">
+          <button data-f="all">Tutti</button><button data-f="todo">Da completare</button><button data-f="done">Completati</button>
+        </div>
+      </div>
+      <div class="pgrid" id="vtlist"></div>
+      <form id="addf" class="row" style="margin-top:16px"><input class="grow" id="newname" placeholder="Aggiungi votante…"><button class="primary">Aggiungi</button></form>
     </div>`;
-  document.querySelectorAll("[data-copy]").forEach((b) => (b.onclick = () => copy(b.dataset.copy, b)));
-  document.getElementById("copyall").onclick = (e) => copy(
-    cfg.voters.map((v) => `${v.name}\n${link(v)}`).join("\n\n"), e.target);
-  document.querySelectorAll("[data-reset]").forEach((b) => (b.onclick = async () => {
-    if (confirm("Rigenerare link e password? Quelli vecchi smetteranno di funzionare (i voti restano).")) { state = await call("reset-voter", { id: b.dataset.reset }); render(); }
-  }));
-  document.querySelectorAll("[data-del]").forEach((b) => (b.onclick = async () => {
-    if (confirm("Eliminare il votante e TUTTI i suoi voti?")) { state = await call("remove-voter", { id: b.dataset.del }); render(); }
-  }));
+  document.getElementById("vtq").oninput = (e) => { vsq = e.target.value; renderVotersList(); };
+  document.querySelectorAll("#vtf button").forEach((b) => (b.onclick = () => { vsf = b.dataset.f; renderVotersList(); }));
+  document.getElementById("copyall").onclick = (e) => copy(cfg.voters.map((v) => `${v.name}\n${voterLink(v)}`).join("\n\n"), e.target);
   document.getElementById("addf").onsubmit = async (e) => {
     e.preventDefault();
     const name = document.getElementById("newname").value.trim();
     if (name) { state = await call("add-voter", { name }); render(); }
   };
+  renderVotersList();
+}
+
+function renderVotersList() {
+  const cfg = state.config, n = cfg.startups.length;
+  const info = cfg.voters.map((v) => {
+    const mine = state.votes[v.id] || {}, keys = Object.keys(mine);
+    return { v, done: keys.length, last: Math.max(0, ...keys.map((k) => mine[k].ts || 0)) };
+  });
+  const full = info.filter((x) => x.done >= n).length, part = info.filter((x) => x.done > 0 && x.done < n).length, none = info.filter((x) => x.done === 0).length;
+  document.getElementById("vtsum").innerHTML =
+    `<span class="pill"><b>${full}</b>completati</span><span class="pill"><b>${part}</b>in corso</span><span class="pill"><b>${none}</b>non iniziati</span>`;
+  document.querySelectorAll("#vtf button").forEach((b) => b.classList.toggle("on", b.dataset.f === vsf));
+
+  const nq = normS(vsq.trim());
+  const list = info.filter(({ v, done }) => (!nq || normS(v.name).includes(nq)) && (vsf === "all" || (vsf === "done" ? done >= n : done < n)))
+    .sort((a, b) => a.v.name.localeCompare(b.v.name, "it", { sensitivity: "base" }));
+  const el = document.getElementById("vtlist");
+  el.innerHTML = list.length ? list.map(({ v, done, last }) => {
+    const cls = done >= n ? "done" : done > 0 ? "part" : "none", lab = done >= n ? "Completato" : done > 0 ? "In corso" : "Non iniziato";
+    const msg = `Ciao ${v.name}, ecco il tuo link personale per votare le startup (Fondazione Ampio Raggio · Challenge Jazz'Inn): ${voterLink(v)}`;
+    return `<div class="pc">
+      <div class="pc-h">
+        <div class="av" style="background:hsl(${hueOf(v.name)} 55% 45%)">${esc(initialsOf(v.name))}</div>
+        <div class="pc-t"><b>${esc(v.name)}</b><small>${last ? "Ultimo voto " + fmtT(last) : "Nessun voto ancora"}</small></div>
+        <span class="stt ${cls}">${lab}</span>
+      </div>
+      <div class="pc-p"><div class="bar"><i style="width:${(done / n) * 100}%"></i></div><span>${done}/${n}</span></div>
+      <div class="pc-a">
+        <button class="primary" data-copy="${esc(voterLink(v))}">Copia link</button>
+        <a class="btn" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(msg)}">WhatsApp</a>
+        <button class="pwb" data-copy="${esc(v.password)}" title="Copia password">${esc(v.password)}</button>
+        <span class="grow"></span>
+        <button class="ghost" data-reset="${v.id}" title="Genera nuovo link e password">Rigenera</button>
+        <button class="ghost danger" data-del="${v.id}">Elimina</button>
+      </div></div>`;
+  }).join("") : '<div class="muted" style="padding:16px 0">Nessun votante trovato.</div>';
+
+  el.querySelectorAll("[data-copy]").forEach((b) => (b.onclick = () => copy(b.dataset.copy, b)));
+  el.querySelectorAll("[data-reset]").forEach((b) => (b.onclick = async () => {
+    if (confirm("Rigenerare link e password? Quelli vecchi smetteranno di funzionare (i voti restano).")) { state = await call("reset-voter", { id: b.dataset.reset }); render(); }
+  }));
+  el.querySelectorAll("[data-del]").forEach((b) => (b.onclick = async () => {
+    if (confirm("Eliminare il votante e TUTTI i suoi voti?")) { state = await call("remove-voter", { id: b.dataset.del }); render(); }
+  }));
 }
 
 // ---------- Scheda "Voti": chi ha votato / chi no, per startup, per votante, voto per voto ----------
