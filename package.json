@@ -1,0 +1,10 @@
+{
+  "name": "startup-voting",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sistema di votazione per startup: link personali per giurato, 7 criteri, risultati live in area riservata.",
+  "type": "module",
+  "dependencies": {
+    "@netlify/blobs": "^8.1.0"
+  }
+}

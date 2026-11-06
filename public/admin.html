@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Area riservata – Votazioni</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="wrap wide" id="app"></div>
+<script>
+const app = document.getElementById("app");
+let pw = "";
+try { pw = sessionStorage.getItem("adminpw") || ""; } catch {}
+let state = null, tab = "rank", timer = null, sortKey = "total", editing = false;
+
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fmt = (n) => (Number.isFinite(n) ? n.toFixed(2).replace(".", ",") : "–");
+
+async function call(action, extra = {}) {
+  const r = await fetch("/api/admin/" + action, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ password: pw, ...extra }),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || "Errore");
+  return data;
+}
+
+function login(error = "") {
+  clearInterval(timer);
+  app.innerHTML = `
+    <div class="card" style="max-width:420px;margin:12vh auto 0">
+      <h1>Area riservata</h1>
+      <form id="f" class="row"><input class="grow" id="p" type="password" placeholder="Password admin" autofocus><button class="primary">Entra</button></form>
+      <div class="err">${esc(error)}</div>
+    </div>`;
+  document.getElementById("f").onsubmit = async (e) => {
+    e.preventDefault();
+    pw = document.getElementById("p").value;
+    await refresh(true);
+  };
+}
+
+async function refresh(first = false) {
+  try {
+    state = await call("state");
+    try { sessionStorage.setItem("adminpw", pw); } catch {}
+    if (first) { render(); clearInterval(timer); timer = setInterval(() => refresh(), 5000); }
+    else if (!editing) render();
+  } catch (e) {
+    if (first || /errata/.test(e.message)) login(e.message);
+  }
+}
+
+// ---- calcoli ----
+function compute() {
+  const { config: cfg, votes } = state;
+  const rows = cfg.startups.map((name, i) => {
+    const per = Object.fromEntries(cfg.criteria.map((c) => [c.id, 0]));
+    let n = 0;
+    for (const v of cfg.voters) {
+      const e = votes[v.id] && votes[v.id][i];
+      if (!e) continue;
+      n++;
+      for (const c of cfg.criteria) per[c.id] += e.scores[c.id];
+    }
+    const total = Object.values(per).reduce((a, b) => a + b, 0);
+    return { i, name, n, per, total, avg: n ? total / n : NaN,
+      avgPer: Object.fromEntries(cfg.criteria.map((c) => [c.id, n ? per[c.id] / n : NaN])) };
+  });
+  const prog = cfg.voters.map((v) => ({ v, done: Object.keys(votes[v.id] || {}).length }));
+  return { rows, prog };
+}
+
+function render() {
+  editing = tab === "startups";
+  const { config: cfg } = state;
+  const { rows, prog } = compute();
+  const totalVotes = rows.reduce((a, r) => a + r.n, 0);
+  const expected = cfg.voters.length * cfg.startups.length;
+  app.innerHTML = `
+    <div class="row">
+      <h1 class="grow"><span class="live"></span>Area riservata</h1>
+      <span class="pill">${totalVotes} / ${expected} valutazioni (${Math.round((totalVotes / expected) * 100) || 0}%)</span>
+      <span class="pill">${cfg.open ? "Votazioni APERTE" : "Votazioni CHIUSE"}</span>
+    </div>
+    <div class="tabs">
+      ${[["rank", "Classifica"], ["voters", "Votanti e link"], ["startups", "Startup"], ["settings", "Impostazioni"]]
+        .map(([k, l]) => `<button data-tab="${k}" class="${tab === k ? "on" : ""}">${l}</button>`).join("")}
+    </div>
+    <div id="body"></div>`;
+  app.querySelectorAll("[data-tab]").forEach((b) => (b.onclick = () => { tab = b.dataset.tab; render(); }));
+  ({ rank: tabRank, voters: tabVoters, startups: tabStartups, settings: tabSettings })[tab](rows, prog);
+}
+
+function tabRank(rows) {
+  const cfg = state.config;
+  const sorted = [...rows].sort((a, b) =>
+    sortKey === "total" ? b.total - a.total
+    : sortKey === "avg" ? (b.avg || 0) - (a.avg || 0)
+    : sortKey === "name" ? a.name.localeCompare(b.name)
+    : (b.per[sortKey] || 0) - (a.per[sortKey] || 0));
+  document.getElementById("body").innerHTML = `
+    <div class="card">
+      <div class="row"><h2 class="grow">Classifica live</h2><button id="csv">Esporta CSV</button></div>
+      <p class="muted" style="margin:0 0 10px">Totale = somma di tutti i punteggi di tutti i giurati. Clicca su un'intestazione per ordinare.</p>
+      <div class="scroll"><table>
+        <thead><tr>
+          <th>#</th><th data-s="name">Startup</th><th class="num">Voti</th>
+          ${cfg.criteria.map((c) => `<th class="num" data-s="${c.id}" title="Somma ${esc(c.label)}">${esc(c.label)}</th>`).join("")}
+          <th class="num" data-s="avg">Media</th><th class="num" data-s="total">TOTALE</th>
+        </tr></thead>
+        <tbody>${sorted.map((r, k) => `<tr>
+          <td>${k + 1}</td><td><b>${esc(r.name)}</b></td><td class="num">${r.n}/${cfg.voters.length}</td>
+          ${cfg.criteria.map((c) => `<td class="num" title="media ${fmt(r.avgPer[c.id])}">${r.per[c.id]}</td>`).join("")}
+          <td class="num">${fmt(r.avg)}</td><td class="num"><b>${r.total}</b></td></tr>`).join("")}</tbody>
+      </table></div>
+    </div>`;
+  document.querySelectorAll("[data-s]").forEach((th) => { th.style.cursor = "pointer"; th.onclick = () => { sortKey = th.dataset.s; render(); }; });
+  document.getElementById("csv").onclick = () => exportCsv(sorted);
+}
+
+function exportCsv(sorted) {
+  const cfg = state.config;
+  const q = (v) => `"${String(v).replace(/"/g, '""')}"`;
+  const head = ["Posizione", "Startup", "N. voti", ...cfg.criteria.map((c) => c.label), "Media", "Totale"];
+  const lines = [head.map(q).join(";")];
+  sorted.forEach((r, k) => lines.push([k + 1, r.name, r.n, ...cfg.criteria.map((c) => r.per[c.id]), fmt(r.avg), r.total].map(q).join(";")));
+  // dettaglio per giurato
+  lines.push("", ["Giurato", "Startup", ...cfg.criteria.map((c) => c.label), "Somma"].map(q).join(";"));
+  for (const v of cfg.voters) for (const [i, e] of Object.entries(state.votes[v.id] || {})) {
+    const vals = cfg.criteria.map((c) => e.scores[c.id]);
+    lines.push([v.name, cfg.startups[i], ...vals, vals.reduce((a, b) => a + b, 0)].map(q).join(";"));
+  }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob(["﻿" + lines.join("\n")], { type: "text/csv;charset=utf-8" }));
+  a.download = "risultati-votazioni.csv"; a.click();
+}
+
+function tabVoters(_, prog) {
+  const cfg = state.config, n = cfg.startups.length;
+  const link = (v) => `${location.origin}/v/${v.token}`;
+  document.getElementById("body").innerHTML = `
+    <div class="card">
+      <div class="row"><h2 class="grow">Votanti (${cfg.voters.length})</h2><button id="copyall">Copia tutti (link + password)</button></div>
+      <p class="muted" style="margin:0 0 10px">Ogni votante riceve il proprio link e la propria password. Il link da solo non basta per votare.</p>
+      <div class="scroll"><table>
+        <thead><tr><th>Nome</th><th>Link personale</th><th>Password</th><th class="num">Avanzamento</th><th></th></tr></thead>
+        <tbody>${prog.map(({ v, done }) => `<tr>
+          <td><b>${esc(v.name)}</b></td>
+          <td><button data-copy="${esc(link(v))}">Copia link</button></td>
+          <td><code class="k">${esc(v.password)}</code></td>
+          <td class="num">${done}/${n}</td>
+          <td class="row" style="gap:6px">
+            <button data-reset="${v.id}" title="Genera nuovo link e password">Rigenera</button>
+            <button class="danger" data-del="${v.id}">Elimina</button></td></tr>`).join("")}</tbody>
+      </table></div>
+      <form id="addf" class="row" style="margin-top:14px"><input class="grow" id="newname" placeholder="Aggiungi votante…"><button class="primary">Aggiungi</button></form>
+    </div>`;
+  document.querySelectorAll("[data-copy]").forEach((b) => (b.onclick = () => copy(b.dataset.copy, b)));
+  document.getElementById("copyall").onclick = (e) => copy(
+    cfg.voters.map((v) => `${v.name}\n${link(v)}\nPassword: ${v.password}`).join("\n\n"), e.target);
+  document.querySelectorAll("[data-reset]").forEach((b) => (b.onclick = async () => {
+    if (confirm("Rigenerare link e password? Quelli vecchi smetteranno di funzionare (i voti restano).")) { state = await call("reset-voter", { id: b.dataset.reset }); render(); }
+  }));
+  document.querySelectorAll("[data-del]").forEach((b) => (b.onclick = async () => {
+    if (confirm("Eliminare il votante e TUTTI i suoi voti?")) { state = await call("remove-voter", { id: b.dataset.del }); render(); }
+  }));
+  document.getElementById("addf").onsubmit = async (e) => {
+    e.preventDefault();
+    const name = document.getElementById("newname").value.trim();
+    if (name) { state = await call("add-voter", { name }); render(); }
+  };
+}
+
+async function copy(text, btn) {
+  try { await navigator.clipboard.writeText(text); const o = btn.textContent; btn.textContent = "Copiato ✓"; setTimeout(() => (btn.textContent = o), 1200); }
+  catch { prompt("Copia manualmente:", text); }
+}
+
+function tabStartups() {
+  const cfg = state.config;
+  document.getElementById("body").innerHTML = `
+    <div class="card">
+      <h2>Elenco startup (${cfg.startups.length})</h2>
+      <p class="muted" style="margin:0 0 10px">Una startup per riga, nell'ordine in cui compariranno ai giurati. Puoi rinominare in qualsiasi momento: i voti restano legati alla <b>posizione</b>, quindi non spostare né cancellare righe a votazioni iniziate.</p>
+      <textarea id="names">${esc(cfg.startups.join("\n"))}</textarea>
+      <div class="row" style="margin-top:10px"><button class="primary" id="savenames">Salva elenco</button><span id="msg" class="muted"></span></div>
+    </div>`;
+  document.getElementById("savenames").onclick = async () => {
+    const names = document.getElementById("names").value.split("\n");
+    try { state = await call("startups", { names }); document.getElementById("msg").textContent = "Salvato ✓"; }
+    catch (e) { document.getElementById("msg").textContent = e.message; }
+  };
+}
+
+function tabSettings() {
+  const cfg = state.config;
+  document.getElementById("body").innerHTML = `
+    <div class="card">
+      <h2>Stato votazioni</h2>
+      <p class="muted">Quando chiudi le votazioni i giurati possono solo consultare i propri voti.</p>
+      <button class="${cfg.open ? "danger" : "primary"}" id="toggle">${cfg.open ? "Chiudi le votazioni" : "Riapri le votazioni"}</button>
+    </div>
+    <div class="card">
+      <h2>Criteri di valutazione</h2>
+      <p class="muted">Punteggio da 1 a 10 per ciascun criterio.</p>
+      <div class="row">${cfg.criteria.map((c) => `<span class="pill">${esc(c.label)}</span>`).join("")}</div>
+    </div>`;
+  document.getElementById("toggle").onclick = async () => { state = await call("open", { open: !cfg.open }); render(); };
+}
+
+if (pw) refresh(true); else login();
+</script>
+</body>
+</html>

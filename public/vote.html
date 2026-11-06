@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Vota le startup</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<script>
+const token = location.pathname.split("/").filter(Boolean)[1] || "";
+const PW_KEY = "pw:" + token;
+const app = document.getElementById("app");
+let password = "";
+try { password = localStorage.getItem(PW_KEY) || ""; } catch {}
+let me = null;        // risposta di /api/me
+let current = null;   // indice startup aperta
+let draft = {};       // punteggi in modifica
+let status = { cls: "", text: "" };
+let queue = Promise.resolve();
+
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+async function api(path, extra = {}) {
+  const r = await fetch("/api/" + path, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ token, password, ...extra }),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw Object.assign(new Error(data.error || "Errore di rete"), { status: r.status });
+  return data;
+}
+
+function renderLogin(error = "") {
+  app.innerHTML = `
+    <div class="card" style="margin-top:12vh">
+      <h1>Accesso votazioni</h1>
+      <p class="sub">Inserisci la password che ti è stata inviata insieme al link.</p>
+      <form id="f" class="row">
+        <input class="grow" id="pw" type="text" autocomplete="off" autocapitalize="none" placeholder="Password" autofocus>
+        <button class="primary">Entra</button>
+      </form>
+      <div class="err">${esc(error)}</div>
+    </div>`;
+  document.getElementById("f").onsubmit = async (e) => {
+    e.preventDefault();
+    password = document.getElementById("pw").value.trim();
+    await load();
+  };
+}
+
+async function load() {
+  try {
+    me = await api("me");
+    try { localStorage.setItem(PW_KEY, password); } catch {}
+    renderList();
+  } catch (e) {
+    try { localStorage.removeItem(PW_KEY); } catch {}
+    renderLogin(password ? e.message : "");
+  }
+}
+
+const isComplete = (idx) => !!(me.votes[idx] && me.votes[idx].scores);
+const doneCount = () => me.startups.filter((_, i) => isComplete(i)).length;
+
+function renderList() {
+  current = null;
+  const n = me.startups.length, d = doneCount();
+  app.innerHTML = `
+    <h1>Ciao ${esc(me.voter.name)} 👋</h1>
+    <p class="sub">Valuta ogni startup su ${me.criteria.length} criteri (da ${me.scale.min} a ${me.scale.max}). I voti si salvano automaticamente e puoi modificarli finché le votazioni restano aperte.</p>
+    ${me.open ? "" : '<div class="card err">Le votazioni sono chiuse: puoi solo consultare i tuoi voti.</div>'}
+    <div class="card">
+      <div class="row"><b class="grow">Avanzamento</b><span>${d} / ${n}</span></div>
+      <div class="bar" style="margin-top:8px"><i style="width:${(d / n) * 100}%"></i></div>
+    </div>
+    <div class="grid">
+      ${me.startups.map((name, i) => `
+        <button class="item ${isComplete(i) ? "done" : ""}" data-i="${i}">
+          <span>${i + 1}. ${esc(name)}</span>
+          <span class="tick">${isComplete(i) ? "✓" : ""}</span>
+        </button>`).join("")}
+    </div>`;
+  app.querySelectorAll("[data-i]").forEach((b) => (b.onclick = () => openStartup(+b.dataset.i)));
+}
+
+function openStartup(i) {
+  current = i;
+  const saved = me.votes[i] && me.votes[i].scores;
+  draft = saved ? { ...saved } : {};
+  status = saved ? { cls: "ok", text: "Voto salvato ✓" } : { cls: "", text: "" };
+  renderStartup();
+}
+
+function renderStartup() {
+  const i = current, total = me.startups.length;
+  app.innerHTML = `
+    <div class="row" style="margin-top:8px">
+      <button id="back">← Elenco</button>
+      <span class="muted grow" style="text-align:right">${i + 1} / ${total}</span>
+    </div>
+    <h1 style="margin-top:14px">${esc(me.startups[i])}</h1>
+    <div class="card">
+      ${me.criteria.map((c) => `
+        <div class="crit">
+          <b>${esc(c.label)}</b>
+          <div class="scale">
+            ${Array.from({ length: me.scale.max - me.scale.min + 1 }, (_, k) => {
+              const v = me.scale.min + k;
+              return `<button data-c="${c.id}" data-v="${v}" class="${draft[c.id] === v ? "on" : ""}" ${me.open ? "" : "disabled"}>${v}</button>`;
+            }).join("")}
+          </div>
+        </div>`).join("")}
+    </div>
+    <div class="sticky">
+      <div class="status ${status.cls}" id="st">${esc(status.text)}</div>
+      <div class="row" style="margin-top:6px">
+        <button id="prev" ${i === 0 ? "disabled" : ""}>← Precedente</button>
+        <button id="next" class="primary grow" ${i === total - 1 ? "disabled" : ""}>Successiva →</button>
+      </div>
+    </div>`;
+  document.getElementById("back").onclick = renderList;
+  document.getElementById("prev").onclick = () => openStartup(i - 1);
+  document.getElementById("next").onclick = () => openStartup(i + 1);
+  app.querySelectorAll(".scale button").forEach((b) => (b.onclick = () => pick(b.dataset.c, +b.dataset.v)));
+}
+
+function setStatus(cls, text) {
+  status = { cls, text };
+  const el = document.getElementById("st");
+  if (el) { el.className = "status " + cls; el.textContent = text; }
+}
+
+function pick(cid, v) {
+  draft[cid] = v;
+  app.querySelectorAll(`[data-c="${cid}"]`).forEach((b) => b.classList.toggle("on", +b.dataset.v === v));
+  const missing = me.criteria.filter((c) => !draft[c.id]).length;
+  if (missing) return setStatus("wait", `Mancano ${missing} criteri: il voto verrà salvato al completamento`);
+  save(current, { ...draft });
+}
+
+function save(idx, scores) {
+  setStatus("wait", "Salvataggio…");
+  // Le richieste partono una alla volta, nell'ordine dei click.
+  queue = queue.then(async () => {
+    try {
+      const r = await api("vote", { startupId: idx, scores });
+      me.votes[idx] = r.saved;
+      if (current === idx) setStatus("ok", "Voto salvato ✓");
+    } catch (e) {
+      if (current === idx) setStatus("bad", "Non salvato: " + e.message + " — riprova a toccare un punteggio");
+    }
+  });
+}
+
+if (!token) renderLogin("Link non valido"); else if (password) load(); else renderLogin();
+</script>
+</body>
+</html>
