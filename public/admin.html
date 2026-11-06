@@ -6,6 +6,32 @@
   <meta name="robots" content="noindex">
   <title>Area riservata – Votazioni</title>
   <link rel="stylesheet" href="/style.css">
+  <style>
+    .nm { font-weight: 700; } .tg { color: var(--muted); font-size: .8rem; font-weight: 400; }
+    .only-m { display: none; } .only-d { display: block; } .only-di { display: inline; }
+    .sortsel { display: none; }
+    .rc { border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-bottom: 10px; background: var(--card); }
+    .rc .top { display: flex; gap: 10px; align-items: flex-start; }
+    .rc .rk { width: 30px; height: 30px; border-radius: 50%; background: var(--chip); display: grid; place-items: center; font-weight: 700; flex: none; }
+    .rc:nth-child(-n+3) .rk { background: var(--brand); color: var(--brand-ink); }
+    .rc .rt { flex: 1; min-width: 0; line-height: 1.25; }
+    .rc .rt .nm { font-size: 1.05rem; color: var(--brand); }
+    .rc .rtot { text-align: right; flex: none; }
+    .rc .rtot b { font-size: 1.6rem; line-height: 1; display: block; }
+    .rc .rtot small { color: var(--muted); font-size: .75rem; }
+    .rc .cr { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; margin-top: 10px; }
+    .rc .c { font-size: .8rem; }
+    .rc .c .l { display: flex; justify-content: space-between; gap: 6px; }
+    .rc .c .l span { color: var(--muted); } .rc .c .l b { font-variant-numeric: tabular-nums; }
+    .rc .c .b { height: 5px; border-radius: 9px; background: var(--line); margin-top: 3px; overflow: hidden; }
+    .rc .c .b i { display: block; height: 100%; background: var(--brand); }
+    @media (max-width: 760px) {
+      .only-m { display: block; } .only-d, .only-di { display: none; }
+      .sortsel { display: block; margin-bottom: 10px; }
+      .wrap.wide { padding: 12px; } h1 { font-size: 1.25rem; }
+      .tabs button { padding: 8px 10px; font-size: .9rem; }
+    }
+  </style>
 </head>
 <body>
 <div class="wrap wide" id="app"></div>
@@ -96,29 +122,48 @@ function render() {
 }
 
 function tabRank(rows) {
-  const cfg = state.config;
+  const cfg = state.config, MAXS = 5;
   const sorted = [...rows].sort((a, b) =>
     sortKey === "total" ? b.total - a.total
     : sortKey === "avg" ? (b.avg || 0) - (a.avg || 0)
     : sortKey === "name" ? a.name.localeCompare(b.name)
     : (b.per[sortKey] || 0) - (a.per[sortKey] || 0));
+  const sp = (s) => { const k = s.indexOf(": "); return k > 0 ? { n: s.slice(0, k), t: s.slice(k + 2) } : { n: s, t: "" }; };
+  const opts = [["total", "Totale"], ["avg", "Media"], ["name", "Nome"], ...cfg.criteria.map((c) => [c.id, c.label])];
+
+  const table = `<div class="scroll only-d"><table>
+      <thead><tr>
+        <th>#</th><th data-s="name">Startup</th><th class="num">Voti</th>
+        ${cfg.criteria.map((c) => `<th class="num" data-s="${c.id}" title="Somma ${esc(c.label)}">${esc(c.label)}</th>`).join("")}
+        <th class="num" data-s="avg">Media</th><th class="num" data-s="total">TOTALE</th>
+      </tr></thead>
+      <tbody>${sorted.map((r, k) => { const x = sp(r.name); return `<tr>
+        <td>${k + 1}</td><td><div class="nm">${esc(x.n)}</div><div class="tg">${esc(x.t)}</div></td><td class="num">${r.n}/${cfg.voters.length}</td>
+        ${cfg.criteria.map((c) => `<td class="num" title="media ${fmt(r.avgPer[c.id])}">${r.per[c.id]}</td>`).join("")}
+        <td class="num">${fmt(r.avg)}</td><td class="num"><b>${r.total}</b></td></tr>`; }).join("")}</tbody>
+    </table></div>`;
+
+  const cards = `<div class="only-m">
+      <select class="sortsel" id="sortsel">${opts.map(([v, l]) => `<option value="${v}" ${v === sortKey ? "selected" : ""}>Ordina per: ${esc(l)}</option>`).join("")}</select>
+      ${sorted.map((r, k) => { const x = sp(r.name); return `<div class="rc">
+        <div class="top">
+          <div class="rk">${k + 1}</div>
+          <div class="rt"><div class="nm">${esc(x.n)}</div><div class="tg">${esc(x.t)}</div></div>
+          <div class="rtot"><b>${r.total}</b><small>media ${fmt(r.avg)} · ${r.n}/${cfg.voters.length} voti</small></div>
+        </div>
+        <div class="cr">${cfg.criteria.map((c) => `<div class="c">
+          <div class="l"><span>${esc(c.label)}</span><b>${r.per[c.id]}</b></div>
+          <div class="b"><i style="width:${r.n ? Math.min(100, (r.per[c.id] / (r.n * MAXS)) * 100) : 0}%"></i></div></div>`).join("")}</div>
+      </div>`; }).join("")}</div>`;
+
   document.getElementById("body").innerHTML = `
     <div class="card">
       <div class="row"><h2 class="grow">Classifica live</h2><button id="csv">Esporta CSV</button></div>
-      <p class="muted" style="margin:0 0 10px">Totale = somma di tutti i punteggi di tutti i giurati. Clicca su un'intestazione per ordinare.</p>
-      <div class="scroll"><table>
-        <thead><tr>
-          <th>#</th><th data-s="name">Startup</th><th class="num">Voti</th>
-          ${cfg.criteria.map((c) => `<th class="num" data-s="${c.id}" title="Somma ${esc(c.label)}">${esc(c.label)}</th>`).join("")}
-          <th class="num" data-s="avg">Media</th><th class="num" data-s="total">TOTALE</th>
-        </tr></thead>
-        <tbody>${sorted.map((r, k) => `<tr>
-          <td>${k + 1}</td><td><b>${esc(r.name)}</b></td><td class="num">${r.n}/${cfg.voters.length}</td>
-          ${cfg.criteria.map((c) => `<td class="num" title="media ${fmt(r.avgPer[c.id])}">${r.per[c.id]}</td>`).join("")}
-          <td class="num">${fmt(r.avg)}</td><td class="num"><b>${r.total}</b></td></tr>`).join("")}</tbody>
-      </table></div>
+      <p class="muted" style="margin:0 0 10px">Totale = somma di tutti i punteggi di tutti i giurati.<span class="only-di"> Clicca su un'intestazione per ordinare.</span></p>
+      ${table}${cards}
     </div>`;
   document.querySelectorAll("[data-s]").forEach((th) => { th.style.cursor = "pointer"; th.onclick = () => { sortKey = th.dataset.s; render(); }; });
+  document.getElementById("sortsel").onchange = (e) => { sortKey = e.target.value; render(); };
   document.getElementById("csv").onclick = () => exportCsv(sorted);
 }
 
